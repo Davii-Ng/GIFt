@@ -10,12 +10,7 @@ import os
 import pandas as pd
 import requests
 
-TSV_URL = "https://raw.githubusercontent.com/raingo/TGIF-Release/master/data/tgif-v1.0.tsv"
-
-# Build paths from this file's location so the code works no matter which folder you run it from.
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(HERE, "data")
-TSV_PATH = os.path.join(DATA_DIR, "tgif-v1.0.tsv")
+from config import DATA_DIR, TSV_PATH, TSV_URL
 
 
 def load_data(limit=None):

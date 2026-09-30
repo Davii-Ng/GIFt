@@ -8,18 +8,12 @@ We turn every GIF description into a vector and save them in a vector database (
 Usage:  python index.py --limit 5000
 """
 import argparse
-import os
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+from config import BATCH_SIZE, COLLECTION, DB_PATH, MODEL_NAME
 from data import load_data
-
-# Settings shared with search.py
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"  # small, fast model: 384 numbers per sentence
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")  # database folder
-COLLECTION = "gif-search"  # a "collection" is like a table in the database
-BATCH_SIZE = 64  # encode this many descriptions at a time (faster than one by one)
 
 
 def main():
@@ -32,9 +26,9 @@ def main():
     client = chromadb.PersistentClient(path=DB_PATH)
     collection = client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
 
-    # Do not index twice. To start over, delete the chroma_db folder.
+    # Do not index twice. To start over, delete the data/chroma_db folder.
     if collection.count() > 0:
-        print(f"Index already has {collection.count()} GIFs. Delete '{DB_PATH}' to rebuild.")
+        print(f"Index already has {collection.count()} GIFs. Delete the '{DB_PATH}' folder to rebuild.")
         return
 
     df = load_data(limit=args.limit)

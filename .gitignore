@@ -10,7 +10,6 @@ venv/
 
 # Generated: dataset download and vector index (rebuild with `python index.py`)
 data/
-chroma_db/
 
 # Editors / OS
 .vscode/

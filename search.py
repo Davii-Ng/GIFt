@@ -10,7 +10,7 @@ Try it:  python search.py a dog being confused
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-from index import COLLECTION, DB_PATH, MODEL_NAME
+from config import COLLECTION, DB_PATH, MODEL_NAME
 
 # Loading the model is slow, so we do it once and keep it here for later searches.
 _model = None
