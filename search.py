@@ -12,6 +12,9 @@ from sentence_transformers import SentenceTransformer
 
 from config import COLLECTION, DB_PATH, MODEL_NAME
 
+MAX_QUERY_CHARS = 500
+MAX_RESULTS = 20
+
 # Loading the model is slow, so we do it once and keep it here for later searches.
 _model = None
 _collection = None
@@ -35,6 +38,13 @@ def search_gif(query, k=10):
     Returns a list of dicts: {"url": ..., "description": ..., "score": ...}
     score is between 0 and 1. Higher = better match.
     """
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("Query must be a non-empty string.")
+    if len(query) > MAX_QUERY_CHARS:
+        raise ValueError(f"Query must be {MAX_QUERY_CHARS} characters or fewer.")
+    if type(k) is not int or not 1 <= k <= MAX_RESULTS:
+        raise ValueError(f"Results must be an integer between 1 and {MAX_RESULTS}.")
+
     model, collection = _load()
 
     query_vector = model.encode(query).tolist()
