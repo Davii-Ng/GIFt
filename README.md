@@ -51,6 +51,7 @@ The same model must be used in both phases. Otherwise the query vector and the s
 | `index.py` | Encode descriptions, save to Chroma |
 | `search.py` | `search_gif(query, k)` |
 | `app.py` | Streamlit UI |
+| `api.py` | FastAPI HTTP API |
 | `notebooks/concepts.ipynb` | Start here: explains embeddings, similarity and vector DBs (no index needed) |
 | `notebooks/gif_search.ipynb` | Step-by-step notebook on the real GIF data |
 | `data/` | Generated, git-ignored: dataset (`tgif-v1.0.tsv`) and database (`chroma_db/`) |
@@ -99,7 +100,15 @@ python search.py a dog being confused
 streamlit run app.py
 ```
 
-### 6. Or run the notebooks
+### 6. Run the HTTP API
+```bash
+uvicorn api:app --host 127.0.0.1 --port 8000
+```
+Search with `curl "http://127.0.0.1:8000/search?q=a%20dog%20being%20confused&k=9"`.
+Interactive API documentation is available at `http://127.0.0.1:8000/docs`.
+The API expects the local GIF index to have been built first.
+
+### 7. Or run the notebooks
 ```powershell
 python -m ipykernel install --user --name gif-search
 jupyter notebook notebooks/
