@@ -12,6 +12,7 @@ benchmark/
     edge_cases.py            96 edge cases (Dataset 2)
     tgif_loader.py           Đọc file TGIF TSV
     examples/                Dữ liệu demo nhỏ
+    dataset1/                Dataset 1 cố định: corpus 10k, 200 queries (được commit)
   retrieval/
     embed.py                 Tạo vector theo MiniLM, Qwen3, BGE-M3, Gemini
     semantic_dataset1.py    Dataset 1 semantic retrieval
@@ -31,7 +32,7 @@ benchmark/
       semantic/              96 edge cases
 ```
 
-Dataset chỉ ở `data/benchmark/dataset1/` (`corpus.jsonl`, `queries.jsonl`, `summary.json`). Vector **cache** ở `data/benchmark/embeddings/dataset1/`, **không phải kết quả benchmark**. Bất kỳ CSV / HTML / JSON benchmark nào đều xuất vào `benchmark/results/`.
+Dataset chỉ ở `benchmark/datasets/dataset1/` (`corpus.jsonl`, `queries.jsonl`, `summary.json`). Vector **cache** ở `data/benchmark/embeddings/dataset1/`, **không phải kết quả benchmark**. Bất kỳ CSV / HTML / JSON benchmark nào đều xuất vào `benchmark/results/`.
 
 ## 2. Khởi động từ đầu
 
@@ -49,7 +50,7 @@ Dataset chỉ ở `data/benchmark/dataset1/` (`corpus.jsonl`, `queries.jsonl`, `
    python -m benchmark prepare
    ```
 
-   Nếu cần **tạo bộ 10k/200 mới thật sự**, hãy đổi tên hoặc sao lưu `data/benchmark/dataset1/`, xóa riêng bản dataset1 cũ (KHÔNG xóa file TGIF), xóa `data/benchmark/embeddings/dataset1/` và các kết quả Dataset 1 cũ, rồi chạy:
+   Nếu cần **tạo bộ 10k/200 mới thật sự**, hãy đổi tên hoặc sao lưu `benchmark/datasets/dataset1/`, xóa riêng bản dataset1 cũ (KHÔNG xóa file TGIF), xóa `data/benchmark/embeddings/dataset1/` và các kết quả Dataset 1 cũ, rồi chạy:
 
    ```powershell
    python -m benchmark prepare --rebuild
