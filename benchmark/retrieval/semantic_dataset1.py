@@ -39,7 +39,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "data" / "benchmark"
-DATASETS = {"v2": BASE / "dataset1"}
+DATASETS = {"v2": ROOT / "benchmark" / "datasets" / "dataset1"}
 VECTOR_V1 = BASE / "embeddings" / "dataset1"
 VECTOR_V2 = VECTOR_V1
 MODEL_IDS = {

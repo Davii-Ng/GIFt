@@ -81,8 +81,8 @@ python -m pytest benchmark/tests -q
 
 ### 1.4. Vị trí dữ liệu và kết quả
 
-- `data/benchmark/dataset1/corpus.jsonl`: corpus 10.000 captions.
-- `data/benchmark/dataset1/queries.jsonl`: 200 queries và GIF ID đáp án.
+- `benchmark/datasets/dataset1/corpus.jsonl`: corpus 10.000 captions.
+- `benchmark/datasets/dataset1/queries.jsonl`: 200 queries và GIF ID đáp án.
 - `data/benchmark/embeddings/dataset1/`: **cache embedding**, không phải báo cáo.
 - `benchmark/datasets/edge_cases.py`: **96 edge cases Dataset 2**, không có corpus 10k GIF.
 - `benchmark/results/`: **mọi CSV / JSON / HTML kết quả đánh giá**.
@@ -411,8 +411,8 @@ Có thể kiểm tra các file chính bằng PowerShell (chạy tại root proje
 
 ```powershell
 # Dataset 1
-Test-Path .\data\benchmark\dataset1\corpus.jsonl
-Test-Path .\data\benchmark\dataset1\queries.jsonl
+Test-Path .\benchmark\datasets\dataset1\corpus.jsonl
+Test-Path .\benchmark\datasets\dataset1\queries.jsonl
 Test-Path .\benchmark\results\dataset1\keyword\bm25_results.json
 Test-Path .\benchmark\results\dataset1\semantic\qwen3_results.json
 Test-Path .\benchmark\results\dataset1\comparison\comparison_all_runs.html
@@ -446,7 +446,7 @@ Invoke-Item .\benchmark\results\dataset2\comparison\comparison_all_runs.html
 | Hiện tượng | Kiểm tra / xử lý |
 |---|---|
 | `No module named benchmark` | Mở Terminal tại **root project**, không phải trong `benchmark/`. |
-| Không thấy `corpus.jsonl` / `queries.jsonl` | Kiểm tra `data/benchmark/dataset1/`, sau đó dùng `python -m benchmark prepare`. Không chuyển dataset vào `results/`. |
+| Không thấy `corpus.jsonl` / `queries.jsonl` | Kiểm tra `benchmark/datasets/dataset1/`, sau đó dùng `python -m benchmark prepare`. Không chuyển dataset vào `results/`. |
 | Hybrid Dataset 1 báo thiếu `vectors.npy` | Chạy embedding cho đúng model đã chọn, ví dụ `python -m benchmark.retrieval.embed --model qwen3 --full` (nếu chọn Qwen3), **chỉ khi cache thiếu**. |
 | Hybrid Dataset 2 báo thiếu `ranking_qwen3.csv` hoặc dataset hash không hợp lệ | Chạy `python -m benchmark.retrieval.semantic_dataset2 --model qwen3` để tạo lại CSV đúng phiên bản; `--report-only` không tạo được CSV thiếu. |
 | Hybrid chạy xong nhưng comparison báo WARNING | Kết quả run có thể đã lưu. Thử chạy lại lệnh so sánh riêng trong **Mục 3.5 / 4.4**; đọc traceback nếu vẫn lỗi. |

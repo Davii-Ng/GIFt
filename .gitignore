@@ -11,13 +11,9 @@ __pycache__/
 *.pem
 *.key
 
-# Large generated caches (regenerate at will)
-data/chroma_db/
-data/benchmark/embeddings/
-
-# Downloaded TGIF metadata (data.py fetches it on first run)
-data/tgif-v1.0.tsv
-data/tgif-v1.0.tsv.partial
+# Large generated caches (regenerate at will): TGIF TSV download,
+# Chroma index, benchmark embeddings. Nothing under data/ is committed.
+data/
 
 # All reports belong here; do not commit regenerated files accidentally
 benchmark/results/**

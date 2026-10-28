@@ -1,0 +1,15 @@
+# Local copy of the CI repo-hygiene checks. Install once per clone:
+#   pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+  - repo: local
+    hooks:
+      - id: no-data-dir
+        name: block files under data/ (downloaded/generated)
+        entry: data/ holds downloaded/generated files and must not be committed
+        language: fail
+        files: ^data/

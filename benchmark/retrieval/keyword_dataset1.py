@@ -34,7 +34,7 @@ from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "data" / "benchmark"
+BASE = ROOT / "benchmark" / "datasets"
 DATASETS = {"v2": BASE / "dataset1"}
 OUT = ROOT / "benchmark" / "results" / "dataset1" / "keyword"
 MODEL_ORDER = ("bm25", "minilm", "qwen3", "bge-m3", "gemini")

@@ -82,6 +82,7 @@ macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate`
 ```powershell
 pip install -r requirements.txt
 ```
+Contributors: also run `pip install pre-commit; pre-commit install`. It blocks commits of files over 1 MB or anything under `data/` (CI checks the same on every PR).
 
 ### 3. Build the index
 ```powershell

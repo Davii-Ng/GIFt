@@ -12,7 +12,7 @@ from pathlib import Path
 import random
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT = ROOT / 'data' / 'benchmark' / 'dataset1'
+DEFAULT = ROOT / 'benchmark' / 'datasets' / 'dataset1'
 
 
 def norm(t):

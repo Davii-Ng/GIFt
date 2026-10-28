@@ -44,7 +44,7 @@ def test_edge_case_total():
 
 def test_frozen_dataset_valid():
     root=Path(__file__).resolve().parents[2]
-    corpus,queries=validate(root/'data'/'benchmark'/'dataset1')
+    corpus,queries=validate(root/'benchmark'/'datasets'/'dataset1')
     assert len(corpus)==10000 and len(queries)==200
 
 

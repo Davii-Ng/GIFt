@@ -40,7 +40,7 @@ DEFAULT_RRF_K = 60                 # typical RRF rank offset
 
 ALLOWED_MODELS = ("minilm", "qwen3", "bge-m3")
 ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "data" / "benchmark" / "dataset1"
+DATA = ROOT / "benchmark" / "datasets" / "dataset1"
 OUT = ROOT / "benchmark" / "results" / "dataset1" / "hybrid"
 RUNS = OUT  # Each experiment is stored directly in hybrid/<run_id>/
 TOP_K = 5
