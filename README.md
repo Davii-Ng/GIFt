@@ -115,6 +115,14 @@ jupyter notebook notebooks/
 ```
 Open `concepts.ipynb` first, then `gif_search.ipynb` (needs step 3). Pick kernel `gif-search`. Run cells top to bottom (outputs are stripped in git).
 
+### 8. Run the retrieval benchmark (optional)
+```powershell
+pip install -r requirements-benchmark.txt
+python -m benchmark --help
+```
+Compares BM25, MiniLM, Qwen3, BGE-M3 and hybrid retrieval on a frozen 10,000-caption / 200-query split.
+See [benchmark/README.md](benchmark/README.md) for the full guide.
+
 ## Example queries
 - a dog being confused
 - animals being cute
