@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "seed": 42,
+  "captions": 10000,
+  "unique_gifs": 9657,
+  "queries": 200,
+  "source_a": 200,
+  "source_b": 0,
+  "preserved_original_a": 120,
+  "new_queries": 80,
+  "origins": {
+    "existing_source_a": 120,
+    "original_caption_heldout_from_v2": 80
+  },
+  "corpus_identical_to_v1": true,
+  "corpus_sha256": "52f710e73c74917d4bf7f516f44aa131703f4e8f127a10c1e4cd4b1f7adc6acf",
+  "queries_sha256": "26b95cab1b2ce5f0066dc2adfad713d77219440537ccaaa9f43705819dc40954",
+  "checks": {
+    "all_queries_held_out": true,
+    "one_unique_target_gif_per_query": true,
+    "all_targets_in_corpus": true,
+    "human_tgif_captions_only": true
+  },
+  "notes": "Source A only. All queries are independent TGIF human captions, not Gemini paraphrases. Corpus bytes unchanged; reuse v1 corpus vectors."
+}

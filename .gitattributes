@@ -1,0 +1,3 @@
+# Benchmark data is hashed byte-for-byte; keep LF on every OS
+*.jsonl text eol=lf
+*.tsv   text eol=lf

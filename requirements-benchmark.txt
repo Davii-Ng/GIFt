@@ -1,0 +1,4 @@
+-r requirements.txt
+# The LLM generator is optional; the dataset prep only requires pandas/requests.
+google-genai>=1.0
+pytest>=8.0
