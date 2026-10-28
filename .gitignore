@@ -1,0 +1,28 @@
+# Python / tooling
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Large generated caches (regenerate at will)
+data/chroma_db/
+data/benchmark/embeddings/
+
+# All reports belong here; do not commit regenerated files accidentally
+benchmark/results/**
+!benchmark/results/
+!benchmark/results/**/
+!benchmark/results/**/.gitkeep
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
