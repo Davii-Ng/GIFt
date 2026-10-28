@@ -1,9 +1,11 @@
-"""TGIF caption data loader.
+"""Step 1: get the data.
 
-`load_data` is retained for the original one-result-per-GIF Chroma demo.
-`load_caption_data` preserves every distinct GIF/caption pair for the benchmark.
+TGIF is a public dataset of ~125,000 GIFs. Each row has two things:
+  - url:         where the GIF lives on the internet
+  - description: a sentence a human wrote about the GIF
+We only download the text file (~18 MB). The GIF images stay on their original servers.
 """
-from pathlib import Path
+import os
 
 import pandas as pd
 import requests
@@ -11,50 +13,27 @@ import requests
 from config import DATA_DIR, TSV_PATH, TSV_URL
 
 
-def ensure_tgif_tsv(tsv_path=TSV_PATH):
-    """Download TGIF metadata once, leaving existing local data untouched."""
-    path = Path(tsv_path)
-    if path.exists():
-        return path
-    # Only download automatically for the project's default data location.
-    if path.resolve() != Path(TSV_PATH).resolve():
-        raise FileNotFoundError(f"Provided TSV does not exist: {path}")
-    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
-    print(f"Downloading TGIF caption metadata to {path} ...")
-    response = requests.get(TSV_URL, timeout=120)
-    response.raise_for_status()
-    tmp = path.with_suffix(path.suffix + ".partial")
-    tmp.write_bytes(response.content)
-    tmp.replace(path)
-    return path
-
-
-def load_caption_data(tsv_path=TSV_PATH):
-    """Return (url, caption) rows with all DISTINCT captions retained per GIF.
-
-    Cleaning: trim whitespace, remove missing URL/caption and exact
-    (url, caption) duplicates. Do not remove duplicate URLs.
-    """
-    path = ensure_tgif_tsv(tsv_path)
-    df = pd.read_csv(
-        path, sep="\t", header=None, names=["url", "caption"],
-        dtype=str, keep_default_na=False, on_bad_lines="error",
-    )
-    for column in ("url", "caption"):
-        df[column] = df[column].str.strip()
-    df = df.loc[(df["url"] != "") & (df["caption"] != "")]
-    return df.drop_duplicates(subset=["url", "caption"]).reset_index(drop=True)
-
-
 def load_data(limit=None):
-    """Backward-compatible loader for the original Chroma/Streamlit demo.
+    """Return a table (pandas DataFrame) with columns `url` and `description`.
 
-    Returns columns `url` and `description` with one caption per unique GIF.
-    The benchmark MUST use `load_caption_data`, not this function.
+    limit: keep only this many random rows. None = keep everything.
     """
-    df = load_caption_data().drop_duplicates(subset="url")
-    if limit is not None:
-        if limit < 1:
-            raise ValueError("limit must be a positive integer")
-        df = df.sample(n=min(limit, len(df)), random_state=42)
-    return df.rename(columns={"caption": "description"}).reset_index(drop=True)
+    # Download only if we do not already have the file.
+    if not os.path.exists(TSV_PATH):
+        os.makedirs(DATA_DIR, exist_ok=True)
+        print("Downloading TGIF dataset...")
+        response = requests.get(TSV_URL, timeout=60)
+        response.raise_for_status()  # stop with an error if the download failed
+        with open(TSV_PATH, "wb") as f:
+            f.write(response.content)
+
+    # The file is tab-separated and has no header row, so we name the columns ourselves.
+    df = pd.read_csv(TSV_PATH, sep="\t", names=["url", "description"])
+
+    # Clean up: drop empty rows and repeated GIFs.
+    df = df.dropna().drop_duplicates(subset="url").reset_index(drop=True)
+
+    if limit:
+        # random_state=42 makes the "random" pick the same every run.
+        df = df.sample(n=min(limit, len(df)), random_state=42).reset_index(drop=True)
+    return df

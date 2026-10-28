@@ -1,89 +1,33 @@
+"""Step 4: a small web page for searching.
 
-"""Step 4: Streamlit GIF Search Application.
-
-Run: streamlit run app.py
+Run:  streamlit run app.py
+Streamlit re-runs this whole file from top to bottom every time the user types or moves a slider.
 """
-
 import streamlit as st
 
 from search import search_gif
 
-# Page configuration
-st.set_page_config(
-    page_title="GIF Search",
-    layout="wide"
-)
-
+st.set_page_config(page_title="GIF Search", layout="wide")
 st.title("GIF Search")
 st.caption("Describe the GIF in your own words.")
 
-# User input
-query = st.text_input(
-    "Describe a GIF",
-    placeholder="a dog being confused"
-)
-
-k = st.slider(
-    "Results",
-    min_value=3,
-    max_value=20,
-    value=9
-)
+# Input widgets. Each returns the current value.
+query = st.text_input("Describe a GIF", placeholder="a dog being confused", max_chars=500)
+k = st.slider("Results", 3, 20, 9)
 
 if query:
     try:
-        # Search GIFs and measure execution time
-        results, timings = search_gif(
-            query,
-            k,
-            return_timing=True
-        )
-
-    except RuntimeError as e:
+        results = search_gif(query, k)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
+    except RuntimeError as e:  # raised by search.py when the index has not been built
         st.error(str(e))
         st.stop()
 
-    # Performance metrics
-    st.subheader("Search Performance")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric(
-        "Model Load",
-        f"{timings['load_ms']:.2f} ms"
-    )
-
-    col2.metric(
-        "Embedding Time",
-        f"{timings['embedding_ms']:.2f} ms"
-    )
-
-    col3.metric(
-        "Vector Search",
-        f"{timings['vector_search_ms']:.2f} ms"
-    )
-
-    col4.metric(
-        "Total Search Time",
-        f"{timings['total_ms']:.2f} ms"
-    )
-
-    st.divider()
-
-    # Display GIF results
-    st.subheader(f"Top {len(results)} GIF Results")
-
+    # Show the GIFs in a grid of 3 columns.
     columns = st.columns(3)
-
     for i, r in enumerate(results):
-        with columns[i % 3]:
-            st.markdown(
-                f'<img src="{r["url"]}" '
-                f'style="width:100%">',
-                unsafe_allow_html=True
-            )
-
-            st.caption(
-                f"{r['description']} "
-                f"({r['score']:.2f})"
-            )
+        with columns[i % 3]:  # i % 3 cycles through columns 0, 1, 2, 0, 1, 2 ...
+            st.image(r["url"], width="stretch")
+            st.caption(f"{r['description']} ({r['score']:.2f})")

@@ -19,7 +19,7 @@ from data import load_data
 def main():
     # Read the optional --limit option from the command line.
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=125000, help="how many GIFs to index")
+    parser.add_argument("--limit", type=int, default=5000, help="how many GIFs to index")
     args = parser.parse_args()
 
     # Open (or create) the database. "cosine" = compare vectors by the angle between them.
