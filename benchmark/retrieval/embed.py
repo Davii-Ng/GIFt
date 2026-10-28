@@ -25,7 +25,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "benchmark"
-DATASET = DATA / "dataset1"
+DATASET = ROOT / "benchmark" / "datasets" / "dataset1"
 OUTPUT = DATA / "embeddings" / "dataset1"
 V2_DATASET = DATASET
 V2_OUTPUT = OUTPUT

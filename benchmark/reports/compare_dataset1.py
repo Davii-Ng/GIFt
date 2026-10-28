@@ -23,7 +23,7 @@ from pathlib import Path
 from benchmark.datasets.build_dataset1 import digest, validate
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "data" / "benchmark" / "dataset1"
+DATA = ROOT / "benchmark" / "datasets" / "dataset1"
 BASE = ROOT / "benchmark" / "results" / "dataset1"
 OUT = BASE / "comparison"
 HYBRID_ROOT = BASE / "hybrid"
