@@ -29,10 +29,12 @@ GIFt ships **gifly**, a browser app for finding and saving GIFs. It also include
 
 | | |
 |---|---|
-| **gifly website** | Shuffled home feed with paging, previews and copyable links. One search bar for GIFs and videos. Wrap a phrase in quotes to prioritise exact matches. |
+| **gifly website** | Shuffled home feed, paged GIF search, previews with Download and copyable links. One search bar for GIFs and videos. |
+| **Create GIF** | Upload a short personal video, trim, crop and rotate it, then export a looping GIF up to 480p at 12 fps. No text overlay or quality selector. |
+| **Your contribution** | A durable library tied to your Firebase UID. Edit names/descriptions, switch Public/Private, download, retry or delete your own GIFs. Public names and descriptions are searchable, with a relevance weight of ×1.02. |
 | **Automatic ranking** | A background benchmark picks between semantic (MiniLM), BM25 and hybrid ranking. Semantic search is the fallback while it runs. |
 | **Relevance feedback** | Like or dislike results to re-rank them (Rocchio). Dislikes are remembered for similar searches. |
-| **Accounts** | Local sign-up and sign-in with per-account favorites, stored in SQLite. Passwords are salted and hashed (PBKDF2-SHA256). |
+| **Accounts** | Firebase sign-up and sign-in with per-account favorites in Cloud Firestore. See [Firebase setup](FIREBASE_SETUP.md). |
 | **Gemini search** | Optional Gemini-embedding index for GIFs and text-to-video search over local clips. |
 | **GIF mirror** | In the Streamlit app, a webcam photo becomes a search phrase for the emotion it shows. |
 | **Benchmark** | BM25, MiniLM, Qwen3, BGE-M3 and hybrid retrieval compared on a frozen 10,000-caption / 200-query split. |
@@ -193,3 +195,9 @@ GIFt began as a small local replica of the [Pinecone GIF search article](https:/
 ## License
 
 Released under the [MIT License](LICENSE).
+
+## Compatibility and contributions
+
+The website uses the current `gift/` modules alongside the Streamlit app and video tooling. Legacy top-level Python commands remain available as compatibility entry points. Accounts use Firebase Authentication and Cloud Firestore; contribution files and processing jobs use persistent server storage.
+
+See [the contribution guide](web/CONTRIBUTIONS.md) for setup, storage, limits and verification.

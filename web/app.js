@@ -1,5 +1,9 @@
+import { observeAccount, authenticate, logout, saveFavorite, accountToken, syncContribution } from './firebase-account.js?v=contribution-studio';
+import { initContributions } from './contributions.js?v=console-only';
+import { logSystem, consoleOnlyValidation } from './system-log.js';
+import { fetchGIFBlob, saveGIFBlob } from './gif-actions.js?v=gif-actions-relevance';
 import { apiBaseFor, requestJSON } from './api-client.js';
-import { feedbackMemory, videoCards } from './tools.js?v=auto-search';
+import { feedbackMemory, videoCards } from './tools.js?v=console-only';
 
 const $ = selector => document.querySelector(selector);
 const API_BASE = apiBaseFor(window.location);
@@ -8,29 +12,61 @@ const HOME_SEED = crypto.getRandomValues(new Uint32Array(1))[0];
 const HOME_VOTE_LIMIT = 30;
 const state = {
   catalog: [], results: [], known: new Map(), total: 0, hasMore: false,
-  mode: 'gif', feedback: null,
+  mode: 'gif', feedback: null, searchPage: null,
   homeVotes: new Map(feedbackMemory('home').filter(entry => Array.isArray(entry) && entry[1]?.choice)),
   homeResults: null,
   query: '', category: 'all', view: 'browse', saved: new Set(), source: 'GIF',
   paused: matchMedia('(prefers-reduced-motion: reduce)').matches,
-  user: null, accountRevision: 0, authMode: 'login', pendingAuth: null, authBusy: false,
+  user: null, accountLoading: true, accountRevision: 0, authMode: 'login', pendingAuth: null, pendingSavedView: false, authBusy: false,
   request: 0, controller: null, loading: false,
 };
 const categoryNames = { reactions: 'Reactions', animals: 'Animals', celebration: 'Celebration', mood: 'Mood' };
-let toastTimer;
+let contributionUI;
+let previewGIF;
+consoleOnlyValidation(document);
+
+async function downloadGIF(gif, button) {
+  const revision = state.accountRevision;
+  const label = button.textContent; button.disabled = true; button.textContent = '…';
+  try {
+    const token = gif.id?.startsWith('contrib_') && state.user ? await accountToken(state.user.id) : undefined;
+    if (revision !== state.accountRevision) return;
+    const blob = await fetchGIFBlob(gif, { base: API_BASE, token });
+    if (revision !== state.accountRevision) return;
+    saveGIFBlob(blob, gif); toast('Your GIF is downloading.');
+  } catch (error) { if (revision === state.accountRevision) logSystem(error, { level: 'error', context: 'download' }); }
+  finally { button.disabled = false; button.textContent = label; }
+}
 
 function toast(message) {
-  $('#toast').textContent = message; $('#toast').hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').hidden = true, 3500);
+  logSystem(message);
+  $('#toast').textContent = ''; $('#toast').hidden = true;
 }
 function notice(message) {
-  $('#notice').textContent = message; $('#notice').hidden = !message;
+  logSystem(message, { level: 'error' });
+  $('#notice').textContent = ''; $('#notice').hidden = true;
 }
-function remember(gifs) { for (const gif of gifs) state.known.set(gif.id, gif); }
+function remember(gifs) {
+  for (const gif of gifs) {
+    if (gif.url?.startsWith('/api/contributions/')) gif.url = API_BASE + gif.url;
+    state.known.set(gif.id, gif);
+  }
+}
 function updateSavedCount() { $('#saved-count').textContent = state.saved.size; }
 function applyAccount(data) {
-  state.accountRevision++;
+  if (state.user?.id !== data.user?.id) {
+    for (const id of state.saved) state.known.delete(id);
+    state.accountRevision++;
+    if (state.view === "saved") { state.controller?.abort(); state.request++; finishRequest(state.request); }
+  }
+  state.accountLoading = Boolean(data.loading);
   state.user = data.user; state.saved = new Set(data.saved || []);
+  contributionUI?.setAccount(state.user);
+  $('#account-button').disabled = state.accountLoading;
+  $('#account-button').textContent = state.accountLoading ? 'Loading account…' : 'Log in / Sign up';
+  $('#saved-nav').disabled = state.accountLoading;
+  $('#logout-button').disabled = state.accountLoading;
+  $('#saved-count').textContent = state.saved.size;
   $('#account-button').hidden = Boolean(state.user);
   $('#account-name').hidden = !state.user;
   $('#account-name').textContent = state.user?.username || '';
@@ -44,10 +80,10 @@ function showAuthErrors(errors = {}, message = '') {
     const input = $(`#auth-${field}`);
     const error = $(`#${field}-error`);
     input.setAttribute('aria-invalid', Boolean(errors[field]));
-    error.textContent = errors[field] || ''; error.hidden = !errors[field];
+    error.textContent = ''; error.hidden = true;
   }
-  $('#auth-error').textContent = message || (Object.keys(errors).length ? 'Please correct the highlighted fields and try again.' : '');
-  $('#auth-error').hidden = !$('#auth-error').textContent;
+  logSystem(message || Object.values(errors).join(' '), { level: 'error', context: 'account' });
+  $('#auth-error').textContent = ''; $('#auth-error').hidden = true;
 }
 function validateAuthForm(focus = false) {
   const errors = {};
@@ -55,7 +91,7 @@ function validateAuthForm(focus = false) {
   const password = $('#auth-password').value;
   const register = state.authMode === 'register';
   if (!username) errors.username = 'Enter your username.';
-  else if (!/^[A-Za-z0-9_.-]{3,32}$/.test(username)) errors.username = 'Use 3–32 letters, numbers, dots, underscores or hyphens, without spaces.';
+  else if (!/^[A-Za-z0-9_]{3,24}$/.test(username)) errors.username = 'Use 3–24 letters, numbers or underscores.';
   if (!password) errors.password = 'Enter your password.';
   else if (password.length < 8 || password.length > 128) errors.password = 'Your password must contain 8–128 characters.';
   if (register) {
@@ -110,23 +146,20 @@ $('#auth-form').addEventListener('submit', async event => {
   state.authBusy = true;
   for (const id of ['auth-submit', 'login-tab', 'register-tab']) $(`#${id}`).disabled = true;
   try {
-    const data = await requestJSON(`/api/auth/${mode}`, { base: API_BASE, method: 'POST',
-      body: { username: $('#auth-username').value.trim(), password } });
-    if (mode === 'register') {
-      $('#auth-form').reset(); setAuthMode('login');
-      $('#auth-success').textContent = 'Account created! Enter your username and password to log in.';
-      $('#auth-success').hidden = false;
-      $('#auth-username').focus();
-      return;
-    }
-    applyAccount(data); $('#auth-dialog').close(); render();
-    toast(`Welcome, ${data.user.username}!`);
+    const result = await authenticate(mode, $('#auth-username').value, password);
+    state.pendingSavedView = pending?.view === 'saved';
+    applyAccount({ user: result.user, saved: state.user?.id === result.user.id ? [...state.saved] : [], loading: state.accountLoading });
+    $('#auth-dialog').close(); render();
+    toast(result.warning || `Welcome, ${result.username}!`);
     if (pending?.gif) {
       const button = document.createElement('button');
       if (!state.saved.has(pending.gif.id)) await toggleSaved(pending.gif, button);
       render();
     }
-    if (pending?.view === 'saved') await showSaved();
+    if (state.pendingSavedView && !state.accountLoading) {
+      state.pendingSavedView = false;
+      await showSaved();
+    }
   } catch (error) {
     const fields = error.status === 409 ? { username: error.message }
       : error.status === 401 ? { username: 'Check your username.', password: 'Check your password.' } : {};
@@ -140,13 +173,9 @@ $('#auth-form').addEventListener('submit', async event => {
 $('#logout-button').addEventListener('click', async () => {
   $('#logout-button').disabled = true;
   try {
-    await requestJSON('/api/auth/logout', { base: API_BASE, method: 'POST' });
-    state.controller?.abort(); state.request++;
-    finishRequest(state.request);
-    applyAccount({ user: null, saved: [] });
-    if (state.view === 'saved') await reset(); else render();
+    await logout();
     toast('You have logged out.');
-  } catch (error) { toast(error.message); }
+  } catch (error) { logSystem(error, { level: 'error', context: 'logout' }); }
   finally { $('#logout-button').disabled = false; }
 });
 function syncSave(button, gif) {
@@ -156,12 +185,13 @@ function syncSave(button, gif) {
   button.setAttribute('aria-pressed', saved);
 }
 async function toggleSaved(gif, button) {
+  if (state.accountLoading && !state.authBusy) { toast('Đang tải tài khoản. Vui lòng chờ.'); return; }
   if (!state.user) { openAuth('login', { gif }); return; }
   const revision = state.accountRevision;
   const saved = !state.saved.has(gif.id);
   button.disabled = true;
   try {
-    await requestJSON(`/api/favorites/${encodeURIComponent(gif.id)}`, { base: API_BASE, method: saved ? 'PUT' : 'DELETE' });
+    await saveFavorite(state.user.id, gif.id, saved);
     if (revision !== state.accountRevision) return;
     if (saved) state.saved.add(gif.id); else state.saved.delete(gif.id);
     remember([gif]); syncSave(button, gif); updateSavedCount();
@@ -169,7 +199,7 @@ async function toggleSaved(gif, button) {
   } catch (error) {
     if (revision !== state.accountRevision) return;
     if (error.status === 401) { applyAccount({ user: null, saved: [] }); openAuth('login', { gif }); }
-    else toast(error.message);
+    else logSystem(error, { level: 'error', context: 'favorites' });
   } finally { button.disabled = false; }
 }
 function pauseImage(image, frame) {
@@ -190,8 +220,7 @@ function makeCard(gif, index) {
   image.addEventListener('load', () => pauseImage(image, open), { once: true });
   image.addEventListener('error', () => {
     image.hidden = true; article.classList.add('unavailable');
-    const fallback = document.createElement('span'); fallback.className = 'broken-image';
-    fallback.textContent = 'This GIF source is unavailable ↗'; open.append(fallback);
+    logSystem('GIF preview could not be loaded.', { level: 'error', context: `gif-preview:${gif.id}`, once: true });
   }, { once: true });
   open.append(image); open.addEventListener('click', () => openGif(gif));
   const info = document.createElement('div'); info.className = 'card-info';
@@ -242,13 +271,22 @@ async function getJSON(url, options) {
 }
 function skeleton() {
   $('#empty-state').hidden = true; $('#collection-end').hidden = true; $('#load-more').hidden = true;
+  $('#search-more-status').hidden = true;
   $('#gif-grid').setAttribute('aria-busy', 'true');
   $('#gif-grid').replaceChildren(...Array.from({ length: 12 }, () => {
     const element = document.createElement('div'); element.className = 'gif-card skeleton';
     element.setAttribute('aria-hidden', 'true'); return element;
   }));
 }
+function renderLoadMore() {
+  const searching = state.view === 'browse' && state.query && state.feedback && state.searchPage;
+  const browseMore = state.view === 'browse' && !state.query && !state.homeResults && state.hasMore;
+  $('#load-more').hidden = !(searching ? !state.searchPage.ended : browseMore);
+  $('#search-more-status').textContent = searching ? state.searchPage.message || '' : '';
+  $('#search-more-status').hidden = !$('#search-more-status').textContent;
+}
 function render() {
+  if (contributionUI && !contributionUI.isExplore()) return;
   if (state.mode !== 'gif') return;
   const feedback = state.view === 'browse' ? state.feedback : null;
   const home = state.view === 'browse' && !state.query;
@@ -272,7 +310,7 @@ function render() {
   $('#gif-grid').classList.toggle('ranked', Boolean(state.view === 'browse' && (state.query || state.homeResults)));
   $('#gif-grid').replaceChildren(...items.map(makeCard)); $('#gif-grid').setAttribute('aria-busy', 'false');
   $('#empty-state').hidden = items.length > 0; $('#collection-end').hidden = items.length === 0;
-  $('#load-more').hidden = !(state.view === 'browse' && !state.query && !state.homeResults && state.hasMore);
+  renderLoadMore();
   $('#empty-title').textContent = state.view === 'saved' ? 'Save a little feeling' : 'No matching GIFs found';
   $('#empty-description').textContent = state.view === 'saved'
     ? 'Tap the heart on a GIF to add it to your collection.' : home && homeHidden ? 'Load more GIFs or show the hidden GIFs again.'
@@ -296,7 +334,8 @@ function syncFilters() {
   });
 }
 async function loadCatalog(append = false) {
-  state.view = 'browse'; state.query = ''; state.feedback = null; $('#search-input').value = '';
+  contributionUI?.showExplore();
+  state.view = 'browse'; state.query = ''; state.feedback = null; state.searchPage = null; $('#search-input').value = '';
   const request = beginRequest(); const offset = append ? state.catalog.length : 0;
   if (!append) { state.catalog = []; state.homeResults = null; skeleton(); }
   try {
@@ -313,6 +352,7 @@ async function loadCatalog(append = false) {
   } catch (error) {
     if (error.name === 'AbortError' || request !== state.request) return;
     render(); notice(error.message);
+    if (!state.catalog.length) $('#empty-state').hidden = true;
   } finally { finishRequest(request); }
 }
 function reset() {
@@ -322,34 +362,62 @@ function reset() {
 }
 
 async function search(query, update = {}) {
+  contributionUI?.showExplore();
   query = query.trim(); if (!query) return reset();
   const previous = state.query === query ? state.feedback : null;
+  const append = Boolean(update.append && previous && state.searchPage);
+  if (append && state.loading) return;
+  if (append && !state.searchPage.hasMore) {
+    state.searchPage.ended = true;
+    state.searchPage.message = 'No more matching GIFs. All results with similarity above 0 are shown.';
+    renderLoadMore(); return;
+  }
   const votes = update.votes ?? previous?.votes ?? new Map();
   const memory = update.memory ?? previous?.memory ?? feedbackMemory('local');
   state.query = query; state.view = 'browse'; $('#search-input').value = query;
   const request = beginRequest();
-  $('#feedback-actions').hidden = true;
-  $('#result-count').textContent = 'Searching by meaning…';
-  skeleton();
+  if (append) {
+    state.searchPage.message = ''; renderLoadMore();
+    $('#load-more').textContent = 'Loading GIFs…'; $('#gif-grid').setAttribute('aria-busy', 'true');
+  } else {
+    state.searchPage = null;
+    $('#feedback-actions').hidden = true;
+    $('#result-count').textContent = 'Searching by meaning…';
+    skeleton();
+  }
   try {
     const idsFor = choice => [...votes].filter(([, vote]) => vote === choice).map(([id]) => id);
     const data = await getJSON('/api/tools/feedback', { method: 'POST', body: {
       query, model: 'auto', limit: Number($('#result-limit').value), category: state.category,
+      offset: append ? state.searchPage.nextOffset : 0,
       liked: idsFor('liked'), disliked: idsFor('disliked'), memory, unhide: Boolean(update.unhide),
     } });
     if (request !== state.request) return;
     const nextMemory = data.memory ?? memory;
     state.feedback = { votes, memory: nextMemory, vector: data.vector, hidden: data.hidden };
-    state.results = data.results;
+    state.results = [...new Map([...(append ? state.results : []), ...data.results].map(gif => [gif.id, gif])).values()];
+    state.searchPage = { nextOffset: data.next_offset, hasMore: data.has_more,
+      ended: append && !data.results.length && !data.has_more,
+      message: append && !data.results.length && !data.has_more
+        ? 'No more matching GIFs. All results with similarity above 0 are shown.' : '' };
     remember(data.results);
     if (update.memory || update.unhide) feedbackMemory('local', nextMemory);
     render();
   } catch (error) {
     if (error.name === 'AbortError' || request !== state.request) return;
     state.feedback = previous;
-    if (!previous) state.results = [];
-    render(); notice(error.message); $('#result-count').textContent = 'Search could not complete';
-  } finally { finishRequest(request); }
+    logSystem(error, { level: 'error', context: 'search' });
+    if (append) {
+      state.searchPage.message = ''; render();
+    } else {
+      if (!previous) state.results = [];
+      render(); $('#result-count').textContent = '';
+      $('#empty-state').hidden = true; $('#collection-end').hidden = true;
+    }
+  } finally {
+    if (request === state.request) $('#load-more').textContent = 'Load more GIFs ↓';
+    finishRequest(request);
+  }
 }
 
 async function applyHomeVotes(votes, recommend = true) {
@@ -406,6 +474,7 @@ async function searchVideo({ submit = false } = {}) {
   if (submit && !query) { $('#search-input').focus(); return; }
   const request = beginRequest();
   const status = $('#search-output-status');
+  status.hidden = false;
   $('#video-results').replaceChildren();
   try {
     if (submit) {
@@ -417,10 +486,15 @@ async function searchVideo({ submit = false } = {}) {
     } else {
       status.textContent = 'Checking video index…';
       const info = await getJSON('/api/tools/status');
-      if (request === state.request) status.textContent = info.video || 'Describe a moment to search indexed video clips.';
+      if (request === state.request) {
+        logSystem(info.video, { level: 'warn', context: 'video-search', once: true });
+        status.textContent = 'Describe a moment to search indexed video clips.';
+      }
     }
   } catch (error) {
-    if (error.name !== 'AbortError' && request === state.request) status.textContent = error.message;
+    if (error.name !== 'AbortError' && request === state.request) {
+      logSystem(error, { level: 'error', context: 'video-search' }); status.textContent = ''; status.hidden = true;
+    }
   } finally { finishRequest(request); }
 }
 
@@ -440,6 +514,8 @@ function syncSearchMode(mode) {
 }
 
 async function showSaved() {
+  contributionUI?.showExplore();
+  if (state.accountLoading) return;
   if (!state.user) { openAuth('login', { view: 'saved' }); return; }
   syncSearchMode('gif');
   state.view = 'saved'; const request = beginRequest(); render();
@@ -457,16 +533,16 @@ async function showSaved() {
   } finally { finishRequest(request); }
 }
 function openGif(gif) {
+  previewGIF = gif;
   const image = document.createElement('img'); image.src = gif.url; image.alt = gif.description; image.referrerPolicy = 'no-referrer';
   image.addEventListener('load', () => pauseImage(image, $('#dialog-preview')), { once: true });
   image.addEventListener('error', () => {
-    image.hidden = true; const message = document.createElement('p'); message.className = 'preview-error';
-    message.textContent = 'This GIF source is unavailable. You can still read the description and open the original link.';
-    $('#dialog-preview').append(message);
+    image.hidden = true;
+    logSystem('GIF preview could not be loaded.', { level: 'error', context: `gif-preview:${gif.id}`, once: true });
   }, { once: true });
   $('#dialog-preview').replaceChildren(image); $('#gif-title').textContent = gif.title;
   $('#gif-description').textContent = gif.description; $('#original-link').href = gif.url;
-  $('#gif-url').value = gif.url; $('#copy-button').textContent = 'Copy GIF link ↗'; $('#gif-dialog').showModal();
+  $('#gif-url').value = new URL(gif.url, location.href).href; $('#copy-button').textContent = 'Copy GIF link ↗'; $('#gif-dialog').showModal();
 }
 
 $('#search-form').addEventListener('submit', event => {
@@ -501,7 +577,7 @@ document.querySelectorAll('[data-category]').forEach(button => button.addEventLi
 }));
 $('#result-limit').addEventListener('change', () => { if (state.query && state.view === 'browse') search(state.query); });
 $('#browse-nav').addEventListener('click', reset); $('#reset-button').addEventListener('click', reset);
-$('#load-more').addEventListener('click', () => loadCatalog(true));
+$('#load-more').addEventListener('click', () => state.query ? search(state.query, { append: true }) : loadCatalog(true));
 $('#saved-nav').addEventListener('click', showSaved);
 $('#how-button').addEventListener('click', () => $('#how-dialog').showModal());
 document.querySelectorAll('dialog').forEach(dialog => {
@@ -513,9 +589,10 @@ document.querySelectorAll('dialog').forEach(dialog => {
   });
 });
 $('#copy-button').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('#gif-url').value); $('#copy-button').textContent = 'Copied ✓'; }
-  catch { $('#gif-url').focus(); $('#gif-url').select(); $('#copy-button').textContent = 'Press Ctrl+C to copy'; }
+  try { await navigator.clipboard.writeText($('#gif-url').value); logSystem('GIF link copied.', { context: 'clipboard' }); }
+  catch (error) { $('#gif-url').focus(); $('#gif-url').select(); logSystem(error, { level: 'error', context: 'clipboard' }); }
 });
+$('#download-gif-button').addEventListener('click', () => previewGIF && downloadGIF(previewGIF, $('#download-gif-button')));
 function syncMotion() {
   $('#motion-button').innerHTML = state.paused ? '<span aria-hidden="true">▷</span> Play GIFs' : '<span aria-hidden="true">Ⅱ</span> Pause GIFs';
   $('#motion-button').setAttribute('aria-pressed', state.paused);
@@ -523,8 +600,25 @@ function syncMotion() {
 $('#motion-button').addEventListener('click', () => { state.paused = !state.paused; syncMotion(); if (!state.loading) render(); });
 async function init() {
   syncMotion(); updateSavedCount();
-  try { applyAccount(await requestJSON('/api/auth/me', { base: API_BASE })); }
-  catch (error) { toast(error.message); }
+  observeAccount(data => {
+    const changed = state.user?.id !== data.user?.id;
+    applyAccount(data);
+    if (!data.user) state.pendingSavedView = false;
+    if (state.pendingSavedView && !data.loading && data.user) {
+      state.pendingSavedView = false;
+      showSaved();
+    }
+    else if (changed && state.view === 'saved' && !data.user) reset();
+    else if (state.view === 'saved' && !data.loading) showSaved();
+    else if (!state.loading) render();
+  }, message => {
+    state.accountLoading = false;
+    $('#account-button').textContent = 'Log in / Sign up';
+    $('#account-button').disabled = false;
+    $('#saved-nav').disabled = false;
+    $('#logout-button').disabled = false;
+    notice(message);
+  }).catch(error => { applyAccount({ user: null, saved: [] }); logSystem(error, { level: 'error', context: 'account' }); });
   if (state.mode !== 'gif' || state.request) return;
   await loadCatalog();
   try {
@@ -532,4 +626,12 @@ async function init() {
     if (!health.ready && state.view === 'browse' && !state.query) notice(health.message);
   } catch { /* The catalog error already explains connection failures. */ }
 }
+contributionUI = initContributions({
+  base: API_BASE, getToken: accountToken, syncCloud: syncContribution, toast,
+  requestLogin: () => openAuth('login'),
+  onNavigate: () => {
+    state.controller?.abort(); state.request++; state.view = 'browse';
+    finishRequest(state.request);
+  },
+});
 init();

@@ -1,5 +1,6 @@
 import json
 import csv
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,6 @@ from web.engine import ROOT, Retriever, close_database, document_for, get_collec
 from web.ingest import ingest
 from web.prepare_tgif import load_tgif
 from web.server import app
-from web.accounts import AccountStore
 
 SAMPLE_PATH = ROOT / "data" / "gifs.json"
 
@@ -69,11 +69,11 @@ class IntegrationTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory(dir=ROOT)
         cls.addClassCleanup(cls.directory.cleanup)
         cls.db_path = Path(cls.directory.name) / "chroma"
-        cls.accounts_patch = patch("web.server.AccountStore", side_effect=lambda: AccountStore(Path(cls.directory.name) / "accounts.sqlite3"))
-        cls.accounts_patch.start()
-        cls.addClassCleanup(cls.accounts_patch.stop)
         cls.addClassCleanup(lambda: close_database(cls.db_path))
         cls.records = read_catalog(SAMPLE_PATH)
+        cls.contribution_patch = patch.dict(os.environ, {'CONTRIBUTION_DATA_DIR': str(Path(cls.directory.name) / 'contributions')})
+        cls.contribution_patch.start()
+        cls.addClassCleanup(cls.contribution_patch.stop)
         ingest(path=SAMPLE_PATH, db_path=cls.db_path)
         cls.catalog_patch = patch("web.server.read_catalog", return_value=cls.records)
         cls.catalog_patch.start()
@@ -93,6 +93,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/app.js").status_code, 200)
         self.assertEqual(self.client.get("/api-client.js").status_code, 200)
+        self.assertEqual(self.client.get('/gif-actions.js').status_code, 200)
+        self.assertEqual(self.client.get('/system-log.js').status_code, 200)
         for path in ("/.chroma/chroma.sqlite3", "/server.py", "/.venv/pyvenv.cfg"):
             self.assertEqual(self.client.get(path).status_code, 404)
 
@@ -103,6 +105,22 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn("application/json", response.headers["content-type"])
         response = self.client.get("/api/catalog", headers={"Origin": "https://unrelated.example"})
         self.assertNotIn("access-control-allow-origin", response.headers)
+        response = self.client.options('/api/contributions', headers={
+            'Origin': 'http://127.0.0.1:5500', 'Access-Control-Request-Method': 'POST',
+            'Access-Control-Request-Headers': 'authorization,content-type'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('authorization', response.headers.get('access-control-allow-headers', '').lower())
+        response = self.client.options('/api/contributions/test/visibility', headers={
+            'Origin': 'http://127.0.0.1:5500', 'Access-Control-Request-Method': 'PATCH',
+            'Access-Control-Request-Headers': 'authorization,content-type'})
+        self.assertEqual(response.status_code, 200)
+
+    def test_upload_body_limit_and_missing_auth(self):
+        response = self.client.post('/api/contributions/uploads', content=b'not a video')
+        self.assertEqual(response.status_code, 401)
+        response = self.client.post('/api/contributions/uploads', content=b'x', headers={
+            'Authorization': 'Bearer invalid', 'Content-Length': str(53 * 1024 * 1024)})
+        self.assertEqual(response.status_code, 413)
 
     def test_semantic_ranking_and_category(self):
         response = self.client.get("/api/search", params={"q": "I desperately want to go to bed", "limit": 3})

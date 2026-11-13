@@ -8,6 +8,10 @@ uvicorn>=0.30
 httpx>=0.28,<1
 numpy>=2,<3
 python-dotenv>=1,<2
+python-multipart>=0.0.22,<1
+imageio-ffmpeg>=0.6,<1
+google-auth[requests]>=2.35,<3
+CacheControl>=0.14,<1
 google-genai>=1.0
 # notebook only
 ipykernel>=7.0

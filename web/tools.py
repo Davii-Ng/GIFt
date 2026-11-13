@@ -17,11 +17,12 @@ from gift.gemini.feedback import adjust_query, forget_similar, hidden_for, norma
 from gift.video.search import embed_text, load_index, rank_rows
 
 from .auto_search import POOL_SIZE
+from .contributions import merge_results
 
 router = APIRouter(prefix="/api/tools")
 logger = logging.getLogger("gifly.tools")
 VIDEO_INDEX = Path(DATA_DIR) / "processed" / "gemini_embedding_2"
-VIDEO_DIR = Path(DATA_DIR) / "videos" / "inbox"
+VIDEO_DIR = Path(DATA_DIR) / "videos"
 REPORTS = Path(ROOT) / "benchmark" / "results"
 VIDEO_TYPES = {".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
                ".m4v": "video/mp4", ".mkv": "video/x-matroska"}
@@ -66,6 +67,9 @@ class FeedbackSearch(BaseModel):
     query: str = Field(min_length=1, max_length=300)
     model: Literal["local", "gemini", "auto"] = "local"
     limit: int = Field(default=12, ge=1, le=60)
+    # Supplying an offset enables relevance-ordered, positive-only search pages.
+    # Existing recommendation clients can omit it to retain their current behavior.
+    offset: int | None = Field(default=None, ge=0)
     category: Literal["all", "reactions", "animals", "celebration", "mood", "general"] = "all"
     liked: list[str] = Field(default_factory=list, max_length=100)
     disliked: list[str] = Field(default_factory=list, max_length=100)
@@ -112,17 +116,32 @@ def feedback_search(body: FeedbackSearch, request: Request):
         adjusted = vector
         if votes:
             found = collection.get(ids=votes, include=["embeddings"])
-            if found["ids"]:
-                index = {"vectors": normalize(found["embeddings"]),
-                         "row_of": {key: i for i, key in enumerate(found["ids"])}}
+            vote_ids = list(found['ids'])
+            vote_vectors = [list(value) for value in found['embeddings']] if len(vote_ids) else []
+            if body.model != 'gemini':
+                try:
+                    community_votes = request.app.state.contributions.feedback_vectors(votes)
+                except Exception:
+                    logger.exception('Community feedback vectors unavailable; retaining catalog feedback')
+                    community_votes = []
+                for key, values in community_votes:
+                    if len(values) == len(vector):
+                        vote_ids.append(key); vote_vectors.append(values)
+            if vote_ids:
+                index = {"vectors": normalize(vote_vectors),
+                         "row_of": {key: i for i, key in enumerate(vote_ids)}}
                 adjusted = adjust_query(vector, index, body.liked, body.disliked)
 
         auto = request.app.state.auto_search if body.model == "auto" and not votes else None
         method = auto.choose(query) if auto else "semantic"
-        pool = body.limit if method == "semantic" else max(body.limit, POOL_SIZE)
-        count = min(collection.count(), pool + len(hidden))
+        paged = body.offset is not None
+        wanted = (body.offset or 0) + body.limit + int(paged)
+        pool = wanted if method == "semantic" else max(wanted, POOL_SIZE)
+        total = collection.count()
+        count = min(total, pool + len(hidden))
         items = []
-        if count:
+        while count:
+            items = []
             hits = collection.query(query_embeddings=[[float(value) for value in adjusted]], n_results=count,
                                     where={"category": body.category} if body.model != "gemini" and body.category != "all" else None,
                                     include=["documents", "metadatas", "distances"])
@@ -136,13 +155,48 @@ def feedback_search(body: FeedbackSearch, request: Request):
                         item.update(title=description[:75], source="Gemini",
                                     favorite_id=request.app.state.id_by_url.get(url))
                     items.append(item)
+            # Hidden or unusable sources must not create an artificial last page.
+            # Chroma query has no offset, so expand the prefix only as needed.
+            positive = sum(item['score'] > 0 for item in items)
+            if (not paged or positive >= pool or count >= total or len(hits['ids'][0]) < count
+                    or not hits['distances'][0] or hits['distances'][0][-1] >= 1):
+                break
+            count = min(total, max(count * 2, count + body.limit))
         if method != "semantic":
             items = auto.rank(query, method, {item["id"]: item for item in items}, body.category, hidden)
-        return {"results": items[:body.limit], "hidden": len(hidden), "vector": vector,
-                "memory": memory if body.unhide else None}
-    except Exception as error:
-        logger.warning("Feedback search failed: %s", type(error).__name__)
-        raise HTTPException(503, "Search failed. Check the selected index and model configuration.") from None
+            # Keyword-only candidates also need a cosine score for a fair merge.
+            missing = [item['id'] for item in items if 'score' not in item]
+            if missing:
+                data = collection.get(ids=missing, include=['embeddings'])
+                direction = normalize(adjusted)
+                scores = {key: float(normalize(values) @ direction)
+                          for key, values in zip(data['ids'], data['embeddings'])}
+                items = [dict(item, score=scores[item['id']], similarity=scores[item['id']])
+                         if item['id'] in scores else item for item in items]
+        community = []
+        if body.model != 'gemini':
+            try:
+                community = request.app.state.contributions.search(query, wanted, vector=adjusted,
+                                                                  hidden=hidden, category=body.category)
+            except Exception:
+                logger.exception('Community search unavailable; retaining catalog results')
+                community = []
+        if paged or community:
+            items = merge_results(items, community, wanted)
+        response = {"hidden": len(hidden), "vector": vector, "memory": memory if body.unhide else None}
+        if paged:
+            # Sort even when the optional community index is empty/unavailable.
+            # Keyword candidates improve recall but cannot bypass the zero cutoff.
+            matches = [item for item in items if item.get('score', -1) > 0]
+            page = matches[body.offset:body.offset + body.limit]
+            response.update(results=page, has_more=len(matches) > body.offset + body.limit,
+                            next_offset=body.offset + len(page))
+        else:
+            response['results'] = items[:body.limit]
+        return response
+    except Exception:
+        logger.exception('Feedback search failed')
+        raise HTTPException(503, 'Search is temporarily unavailable. Please try again.') from None
 
 
 @lru_cache(maxsize=1)

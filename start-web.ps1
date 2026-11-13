@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [switch]$IndexData,
-    [string]$PythonPath
+    [string]$PythonPath,
+    [ValidateRange(1024, 65535)]
+    [int]$Port = 8000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,8 +29,8 @@ try {
         & $giflyPython -X utf8 -m web.ingest
         if ($LASTEXITCODE -ne 0) { throw 'GIF indexing failed. See the error above.' }
     }
-    Write-Host 'gifly is starting at http://127.0.0.1:8000. Press Ctrl+C to stop.'
-    & $giflyPython -X utf8 -m uvicorn api:app --host 127.0.0.1 --port 8000
+    Write-Host "gifly is starting at http://127.0.0.1:$Port. Press Ctrl+C to stop."
+    & $giflyPython -X utf8 -m uvicorn api:app --host 127.0.0.1 --port $Port
     if ($LASTEXITCODE -ne 0) { throw 'GIF server stopped with an error. See the error above.' }
 } finally {
     Pop-Location

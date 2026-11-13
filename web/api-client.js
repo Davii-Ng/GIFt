@@ -12,18 +12,19 @@ export class APIError extends Error {
   }
 }
 
-export async function requestJSON(path, { base = '', signal, method = 'GET', body, fetchImpl = globalThis.fetch } = {}) {
+export async function requestJSON(path, { base = '', signal, method = 'GET', body, headers = {}, fetchImpl = globalThis.fetch } = {}) {
   let response;
   try {
     response = await fetchImpl(`${base}${path}`, {
       signal, method, credentials: 'include',
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch (error) {
     if (error.name === 'AbortError') throw error;
     throw new APIError(`Cannot connect to the GIF server. Run start-web.ps1 and open ${LOCAL_API}.`, 'connection');
   }
+  if (response.status === 204) return null;
   const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (contentType !== 'application/json' && !contentType.endsWith('+json')) {
     throw new APIError(`This address returned a web page instead of GIF data. Run start-web.ps1 and open ${LOCAL_API}.`, 'invalid-response', response.status);

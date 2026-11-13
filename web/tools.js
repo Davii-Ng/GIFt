@@ -1,3 +1,5 @@
+import { logSystem } from './system-log.js';
+
 export function feedbackMemory(model, updated) {
   const key = 'gifly-feedback-' + model;
   try {
@@ -7,7 +9,7 @@ export function feedbackMemory(model, updated) {
     }
     const items = JSON.parse(localStorage.getItem(key) || '[]');
     return Array.isArray(items) ? items.slice(-100) : [];
-  } catch { return updated || []; }
+  } catch (error) { logSystem(error, { level: 'warn', context: 'feedback-memory', once: true }); return updated || []; }
 }
 
 function text(tag, value) {
@@ -24,9 +26,12 @@ export function videoCards(results, base) {
       video.src = base + item.url;
       video.controls = true;
       video.preload = 'metadata';
+      video.addEventListener('error', () => {
+        video.hidden = true; logSystem('Video preview could not be loaded.', { level: 'error', context: 'video-preview', once: true });
+      }, { once: true });
       video.addEventListener('error', () => video.replaceWith(text('p', 'This video format could not be played.')), { once: true });
       card.append(video);
-    } else card.append(text('p', 'Video file unavailable.'));
+    } else logSystem('Video file unavailable.', { level: 'warn', context: 'video-preview', once: true });
     card.append(text('p', item.name), text('p', 'Similarity ' + item.score.toFixed(2)));
     return card;
   });
